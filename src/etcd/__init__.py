@@ -64,11 +64,12 @@ class EtcdResult(object):
             return
         for n in self._children:
             node = EtcdResult(None, n)
-            if not leaves_only:
+            if leaves_only:
                 #Return also dirs, not just value nodes
                 yield node
-            for child in node.get_subtree(leaves_only=leaves_only):
-                yield child
+            else:
+                for child in node.get_subtree(leaves_only=leaves_only):
+                    yield child
         return
 
     @property
