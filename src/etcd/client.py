@@ -6,7 +6,8 @@
 
 
 """
-import urllib3
+import requests
+from requests import request
 import json
 import ssl
 
@@ -23,9 +24,16 @@ class Client(object):
     _MPUT = 'PUT'
     _MPOST = 'POST'
     _MDELETE = 'DELETE'
-    _comparison_conditions = set(('prevValue', 'prevIndex', 'prevExist'))
-    _read_options = set(('recursive', 'wait', 'waitIndex', 'sorted', 'consistent'))
-    _del_conditions = set(('prevValue', 'prevIndex'))
+    _comparison_conditions = set(
+        ('prevValue', 'prevIndex', 'prevExist')
+    )
+    _read_options = set(
+        ('recursive', 'wait', 'waitIndex', 'sorted', 'consistent')
+    )
+    _del_conditions = set(
+        ('prevValue', 'prevIndex')
+    )
+
     def __init__(
             self,
             host='127.0.0.1',
@@ -48,7 +56,8 @@ class Client(object):
 
             port (int):  Port used to connect to etcd.
 
-            version_prefix (str): Url or version prefix in etcd url (default=/v2).
+            version_prefix (str): Url or version prefix in etcd url
+                (default=/v2).
 
             read_timeout (int):  max seconds to wait for a read.
 
@@ -82,6 +91,10 @@ class Client(object):
             self._machines_cache.extend(
                 [uri(self._protocol, *conn) for conn in host])
 
+        if protocol == 'https':
+            s = requests.Session()
+            s.mount(self._host, etcd.Tlsv1HttpAdapter())
+
         self._base_uri = uri(self._protocol, self._host, self._port)
 
         self.version_prefix = version_prefix
@@ -91,6 +104,8 @@ class Client(object):
         self._allow_reconnect = allow_reconnect
 
         # SSL Client certificate support
+        self._cert_file = None
+        self._ca_certs = False
 
         kw = {}
 
@@ -103,19 +118,12 @@ class Client(object):
             kw['ssl_version'] = ssl.PROTOCOL_TLSv1
 
             if cert:
-                if isinstance(cert, tuple):
-                    # Key and cert are separate
-                    kw['cert_file'] = cert[0]
-                    kw['key_file'] = cert[1]
-                else:
-                    # combined certificate
-                    kw['cert_file'] = cert
+                self._cert_file = cert
 
             if ca_cert:
-                kw['ca_certs'] = ca_cert
-                kw['cert_reqs'] = ssl.CERT_REQUIRED
+                self._ca_certs = ca_cert
 
-        self.http = urllib3.PoolManager(num_pools=10, **kw)
+        # self.http = PoolManager(num_pools=10, **kw)
 
         if self._allow_reconnect:
             # we need the set of servers in the cluster in order to try
@@ -169,7 +177,7 @@ class Client(object):
         return [
             node.strip() for node in self.api_execute(
                 self.version_prefix + '/machines',
-                self._MGET).data.decode('utf-8').split(',')
+                self._MGET).content.decode('utf-8').split(',')
         ]
 
     @property
@@ -183,7 +191,7 @@ class Client(object):
         """
         return self.api_execute(
             self.version_prefix + '/leader',
-            self._MGET).data.decode('ascii')
+            self._MGET).content.decode('ascii')
 
     @property
     def key_endpoint(self):
@@ -210,7 +218,6 @@ class Client(object):
             key = "/{}".format(key)
         return key
 
-
     def write(self, key, value, ttl=None, dir=False, append=False, **kwdargs):
         """
         Writes the value for a key, possibly doing atomit Compare-and-Swap
@@ -222,23 +229,29 @@ class Client(object):
 
             ttl (int):  Time in seconds of expiration (optional).
 
-            dir (bool): Set to true if we are writing a directory; default is false.
+            dir (bool): Set to true if we are writing a directory;
+                default is false.
 
-            append (bool): If true, it will post to append the new value to the dir, creating a sequential key. Defaults to false.
+            append (bool): If true, it will post to append the new value
+                to the dir, creating a sequential key. Defaults to false.
 
             Other parameters modifying the write method are accepted:
 
 
-            prevValue (str): compare key to this value, and swap only if corresponding (optional).
+            prevValue (str): compare key to this value, and swap only if
+                corresponding (optional).
 
-            prevIndex (int): modify key only if actual modifiedIndex matches the provided one (optional).
+            prevIndex (int): modify key only if actual modifiedIndex
+                matches the provided one (optional).
 
-            prevExist (bool): If false, only create key; if true, only update key.
+            prevExist (bool): If false, only create key;
+                if true, only update key.
 
         Returns:
             client.EtcdResult
 
-        >>> print client.write('/key', 'newValue', ttl=60, prevExist=False).value
+        >>> print client.write('/key', 'newValue',
+                               ttl=60, prevExist=False).value
         'newValue'
 
         """
@@ -297,8 +310,6 @@ class Client(object):
 
         return self.write(obj.key, obj.value, **kwdargs)
 
-
-
     def read(self, key, **kwdargs):
         """
         Returns the value of the key 'key'.
@@ -310,7 +321,8 @@ class Client(object):
 
             recursive (bool): If you should fetch recursively a dir
 
-            wait (bool): If we should wait and return next time the key is changed
+            wait (bool): If we should wait and return next time the key
+                is changed
 
             waitIndex (int): The index to fetch results from.
 
@@ -344,7 +356,8 @@ class Client(object):
         timeout = kwdargs.get('timeout', None)
 
         response = self.api_execute(
-            self.key_endpoint + key, self._MGET, params=params, timeout=timeout)
+            self.key_endpoint + key, self._MGET,
+            params=params, timeout=timeout)
         return self._result_from_response(response)
 
     def delete(self, key, recursive=None, dir=None, **kwdargs):
@@ -363,8 +376,8 @@ class Client(object):
             prevValue (str): compare key to this value, and swap only if
                              corresponding (optional).
 
-            prevIndex (int): modify key only if actual modifiedIndex matches the
-                             provided one (optional).
+            prevIndex (int): modify key only if actual modifiedIndex matches
+                the provided one (optional).
 
         Returns:
             client.EtcdResult
@@ -506,7 +519,8 @@ class Client(object):
         """
         local_index = index
         while True:
-            response = self.watch(key, index=local_index, timeout=0, recursive=recursive)
+            response = self.watch(key, index=local_index,
+                                  timeout=0, recursive=recursive)
             if local_index is not None:
                 local_index += 1
             yield response
@@ -521,9 +535,9 @@ class Client(object):
     def _result_from_response(self, response):
         """ Creates an EtcdResult from json dictionary """
         try:
-            res = json.loads(response.data.decode('utf-8'))
+            res = json.loads(response.content.decode('utf-8'))
             r = etcd.EtcdResult(**res)
-            if response.status == 201:
+            if response.status_code == 201:
                 r.newKey = True
             r.parse_headers(response)
             return r
@@ -542,7 +556,7 @@ class Client(object):
         """ Executes the query. """
 
         some_request_failed = False
-        response = False
+        response = None
 
         if timeout is None:
             timeout = self.read_timeout
@@ -553,31 +567,42 @@ class Client(object):
         if not path.startswith('/'):
             raise ValueError('Path does not start with /')
 
-        while not response:
+        while response is None:
             try:
                 url = self._base_uri + path
 
-                if (method == self._MGET) or (method == self._MDELETE):
-                    response = self.http.request(
-                        method,
-                        url,
-                        timeout=timeout,
-                        fields=params,
-                        redirect=self.allow_redirect)
+                response = request(method, url,
+                                   params=params,
+                                   timeout=timeout,
+                                   allow_redirects=self.allow_redirect,
+                                   cert=self._cert_file,
+                                   verify=self._ca_certs)
+                # if (method == self._MGET) or (method == self._MDELETE):
+                #     response = self.http.request(
+                #         method,
+                #         url,
+                #         timeout=timeout,
+                #         fields=params,
+                #         redirect=self.allow_redirect)
 
-                elif (method == self._MPUT) or (method == self._MPOST):
-                    response = self.http.request_encode_body(
-                        method,
-                        url,
-                        fields=params,
-                        timeout=timeout,
-                        encode_multipart=False,
-                        redirect=self.allow_redirect)
-                else:
-                    raise etcd.EtcdException(
-                        'HTTP method {} not supported'.format(method))
+                # elif (method == self._MPUT) or (method == self._MPOST):
+                #     response = self.http.request_encode_body(
+                #         method,
+                #         url,
+                #         fields=params,
+                #         timeout=timeout,
+                #         encode_multipart=False,
+                #         redirect=self.allow_redirect)
+                # else:
+                #     raise etcd.EtcdException(
+                #         'HTTP method {} not supported'.format(method))
 
-            except urllib3.exceptions.MaxRetryError:
+            except requests.packages.urllib3.exceptions.MaxRetryError:
+                self._base_uri = self._next_server()
+                some_request_failed = True
+            except requests.exceptions.SSLError as se:
+                raise se
+            except requests.ConnectionError:
                 self._base_uri = self._next_server()
                 some_request_failed = True
 
@@ -588,11 +613,11 @@ class Client(object):
 
     def _handle_server_response(self, response):
         """ Handles the server response """
-        if response.status in [200, 201]:
+        if response.status_code in [200, 201]:
             return response
 
         else:
-            resp = response.data.decode('utf-8')
+            resp = response.content.decode('utf-8')
 
             # throw the appropriate exception
             try:

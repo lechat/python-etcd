@@ -3,6 +3,20 @@ from .client import Client
 from .lock import Lock
 from .election import LeaderElection
 
+import ssl
+
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.poolmanager import PoolManager
+
+
+class Tlsv1HttpAdapter(HTTPAdapter):
+    """"Transport adapter" that allows us to use TLSv1."""
+
+    def init_poolmanager(self, connections, maxsize, block=False):
+        self.poolmanager = PoolManager(num_pools=connections,
+                                       maxsize=maxsize,
+                                       block=block,
+                                       ssl_version=ssl.PROTOCOL_TLSv1)
 
 class EtcdResult(object):
     _node_props = {
@@ -45,7 +59,7 @@ class EtcdResult(object):
                 self.dir = True
 
     def parse_headers(self, response):
-        headers = response.getheaders()
+        headers = response.headers
         self.etcd_index = int(headers.get('x-etcd-index', 1))
         self.raft_index = int(headers.get('x-raft-index', 1))
 
