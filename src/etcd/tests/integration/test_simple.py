@@ -6,14 +6,10 @@ import unittest
 import multiprocessing
 import tempfile
 
-import urllib3
 import requests
 
 import etcd
 from . import helpers
-
-from nose.tools import nottest
-
 
 log = logging.getLogger()
 
