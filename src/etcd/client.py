@@ -13,6 +13,8 @@ import ssl
 
 import etcd
 
+import logging
+
 
 class Client(object):
 
@@ -577,25 +579,6 @@ class Client(object):
                                    allow_redirects=self.allow_redirect,
                                    cert=self._cert_file,
                                    verify=self._ca_certs)
-                # if (method == self._MGET) or (method == self._MDELETE):
-                #     response = self.http.request(
-                #         method,
-                #         url,
-                #         timeout=timeout,
-                #         fields=params,
-                #         redirect=self.allow_redirect)
-
-                # elif (method == self._MPUT) or (method == self._MPOST):
-                #     response = self.http.request_encode_body(
-                #         method,
-                #         url,
-                #         fields=params,
-                #         timeout=timeout,
-                #         encode_multipart=False,
-                #         redirect=self.allow_redirect)
-                # else:
-                #     raise etcd.EtcdException(
-                #         'HTTP method {} not supported'.format(method))
 
             except requests.packages.urllib3.exceptions.MaxRetryError:
                 self._base_uri = self._next_server()
