@@ -10,7 +10,9 @@ from requests.packages.urllib3.poolmanager import PoolManager
 
 
 class Tlsv1HttpAdapter(HTTPAdapter):
-    """"Transport adapter" that allows us to use TLSv1."""
+    """"
+    Transport adapter that allows us to use TLSv1.
+    """
 
     def init_poolmanager(self, connections, maxsize, block=False):
         self.poolmanager = PoolManager(num_pools=connections,
