@@ -1,4 +1,3 @@
-import collections
 from .client import Client
 from .lock import Lock
 from .election import LeaderElection
@@ -19,6 +18,7 @@ class Tlsv1HttpAdapter(HTTPAdapter):
                                        maxsize=maxsize,
                                        block=block,
                                        ssl_version=ssl.PROTOCOL_TLSv1)
+
 
 class EtcdResult(object):
     _node_props = {
@@ -56,7 +56,7 @@ class EtcdResult(object):
 
         if prevNode:
             self._prev_node = EtcdResult(None, node=prevNode)
-            # See issue 38: when returning a write() op etcd has a bogus result.
+            # See issue 38: when returning a write() op etcd has a bogus result
             if self._prev_node.dir and not self.dir:
                 self.dir = True
 
@@ -76,7 +76,7 @@ class EtcdResult(object):
 
         """
         if not self._children:
-            #if the current result is a leaf, return itself
+            # if the current result is a leaf, return itself
             yield self
             return
         for n in self._children:
@@ -85,7 +85,7 @@ class EtcdResult(object):
                 yield node
             else:
                 if not leaves_only:
-                    #Return also dirs, not just value nodes
+                    # Return also dirs, not just value nodes
                     yield node
                 for child in node.get_subtree(leaves_only=leaves_only):
                     yield child
@@ -127,7 +127,7 @@ class EtcdException(Exception):
     """
     def __init__(self, message=None, payload=None):
         super(Exception, self).__init__(message)
-        self.payload=payload
+        self.payload = payload
 
 
 class EtcdKeyError(EtcdException):
@@ -136,11 +136,13 @@ class EtcdKeyError(EtcdException):
     """
     pass
 
+
 class EtcdKeyNotFound(EtcdKeyError):
     """
     Etcd key not found exception (100)
     """
     pass
+
 
 class EtcdNotFile(EtcdKeyError):
     """
@@ -148,11 +150,13 @@ class EtcdNotFile(EtcdKeyError):
     """
     pass
 
+
 class EtcdNotDir(EtcdKeyError):
     """
     Etcd not a directory exception (104)
     """
     pass
+
 
 class EtcdAlreadyExist(EtcdKeyError):
     """
@@ -160,11 +164,13 @@ class EtcdAlreadyExist(EtcdKeyError):
     """
     pass
 
+
 class EtcdEventIndexCleared(EtcdException):
     """
     Etcd event index is outdated and cleared exception (401)
     """
     pass
+
 
 class EtcdError(object):
     # See https://github.com/coreos/etcd/blob/master/Documentation/errorcode.md
@@ -192,24 +198,24 @@ class EtcdError(object):
         """ Decodes the error and throws the appropriate error message"""
         try:
             msg = '{} : {}'.format(message, cause)
-            payload={'errorCode': errorCode, 'message': message, 'cause': cause}
+            payload = {
+                'errorCode': errorCode,
+                'message': message,
+                'cause': cause
+            }
             if len(kwdargs) > 0:
                 for key in kwdargs:
-                    payload[key]=kwdargs[key]
+                    payload[key] = kwdargs[key]
             exc = cls.error_exceptions[errorCode]
         except:
             msg = "Unable to decode server response"
             exc = EtcdException
-        if exc in [EtcdException, EtcdKeyNotFound, EtcdNotFile, EtcdNotDir, EtcdAlreadyExist, EtcdEventIndexCleared]:
+        if exc in [EtcdException,
+                   EtcdKeyNotFound,
+                   EtcdNotFile,
+                   EtcdNotDir,
+                   EtcdAlreadyExist,
+                   EtcdEventIndexCleared]:
             raise exc(msg, payload)
         else:
             raise exc(msg)
-
-
-# Attempt to enable urllib3's SNI support, if possible
-# Blatantly copied from requests.
-try:
-    from urllib3.contrib import pyopenssl
-    pyopenssl.inject_into_urllib3()
-except ImportError:
-    pass
