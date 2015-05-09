@@ -31,7 +31,6 @@ class EtcdProcessHelper(object):
             self.add_one(i, proc_args)
 
     def stop(self):
-        log = logging.getLogger()
         for key in [k for k in self.processes.keys()]:
             self.kill_one(key)
 
@@ -153,7 +152,8 @@ class TestingCA(object):
             crypto.X509Extension(
                 "keyUsage".encode('ascii'),
                 False,
-                "nonRepudiation,digitalSignature,keyEncipherment".encode('ascii')),
+                "nonRepudiation,digitalSignature,keyEncipherment"
+                .encode('ascii')),
             crypto.X509Extension(
                 "extendedKeyUsage".encode('ascii'),
                 False,
