@@ -9,11 +9,12 @@
 import requests
 from requests import request
 import json
-import ssl
 
 import etcd
 
 import logging
+
+log = logging.getLogger(__name__)
 
 
 class Client(object):
@@ -93,10 +94,6 @@ class Client(object):
             self._machines_cache.extend(
                 [uri(self._protocol, *conn) for conn in host])
 
-        if protocol == 'https':
-            s = requests.Session()
-            s.mount(self._host, etcd.Tlsv1HttpAdapter())
-
         self._base_uri = uri(self._protocol, self._host, self._port)
 
         self.version_prefix = version_prefix
@@ -109,15 +106,9 @@ class Client(object):
         self._cert_file = None
         self._ca_certs = False
 
-        kw = {}
-
-        if self._read_timeout > 0:
-            kw['timeout'] = self._read_timeout
-
         if protocol == 'https':
-            # If we don't allow TLSv1, clients using older version of OpenSSL
-            # (<1.0) won't be able to connect.
-            kw['ssl_version'] = ssl.PROTOCOL_TLSv1
+            s = requests.Session()
+            s.mount(self._host, etcd.Tlsv1HttpAdapter())
 
             if cert:
                 self._cert_file = cert
@@ -222,7 +213,7 @@ class Client(object):
 
     def write(self, key, value, ttl=None, dir=False, append=False, **kwdargs):
         """
-        Writes the value for a key, possibly doing atomit Compare-and-Swap
+        Writes the value for a key, possibly doing atomic Compare-and-Swap
 
         Args:
             key (str):  Key.
@@ -279,13 +270,15 @@ class Client(object):
                     params[k] = v
 
         method = append and self._MPOST or self._MPUT
+
         if '_endpoint' in kwdargs:
             path = kwdargs['_endpoint'] + key
         else:
             path = self.key_endpoint + key
 
-        response = self.api_execute(path, method, params=params)
-        return self._result_from_response(response)
+        return self._result_from_response(
+            self.api_execute(path, method, params=params)
+        )
 
     def update(self, obj):
         """
@@ -357,10 +350,11 @@ class Client(object):
 
         timeout = kwdargs.get('timeout', None)
 
-        response = self.api_execute(
-            self.key_endpoint + key, self._MGET,
-            params=params, timeout=timeout)
-        return self._result_from_response(response)
+        return self._result_from_response(
+            self.api_execute(
+                self.key_endpoint + key, self._MGET,
+                params=params, timeout=timeout)
+        )
 
     def delete(self, key, recursive=None, dir=None, **kwdargs):
         """
@@ -403,9 +397,10 @@ class Client(object):
             if k in kwdargs:
                 kwds[k] = kwdargs[k]
 
-        response = self.api_execute(
-            self.key_endpoint + key, self._MDELETE, params=kwds)
-        return self._result_from_response(response)
+        return self._result_from_response(
+            self.api_execute(
+                self.key_endpoint + key, self._MDELETE, params=kwds)
+        )
 
     # Higher-level methods on top of the basic primitives
     def test_and_set(self, key, value, prev_value, ttl=None):
@@ -580,9 +575,10 @@ class Client(object):
                                    cert=self._cert_file,
                                    verify=self._ca_certs)
 
-            except requests.packages.urllib3.exceptions.MaxRetryError:
-                self._base_uri = self._next_server()
-                some_request_failed = True
+            # The order of exceptions matter in this case:
+            #   if SSLError happens, we don't want to continue connecting to
+            #   other servers in a cluster, but when anything else happens
+            #   we want to try other servers.
             except requests.exceptions.SSLError as se:
                 raise se
             except requests.ConnectionError:
